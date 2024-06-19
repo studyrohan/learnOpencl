@@ -31,6 +31,8 @@ using namespace std;
 
 int main()
 {
+
+	testOpencl();
 	/* 获取平台ID */
 	cl_platform_id  pid;
 	cl_int err = clGetPlatformIDs(1, &pid, nullptr);

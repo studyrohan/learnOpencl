@@ -6,7 +6,7 @@
 project("OpenclTest")
 set(3rd ${CMAKE_CURRENT_SOURCE_DIR}/../3rd)
 
-add_executable (${PROJECT_NAME} "learnOpencl.cpp" "learnOpencl.h")
+add_executable (${PROJECT_NAME} "learnOpencl.cpp" "opencltest.cpp" "learnOpencl.h")
 target_include_directories(
         ${PROJECT_NAME}
         PRIVATE
