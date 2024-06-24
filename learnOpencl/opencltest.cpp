@@ -4,14 +4,18 @@
 #define KERNEL_SRC_MAX (1 << 20)
 
 #define KERNEL(...) #__VA_ARGS__
-
+//	//%x 是 C 语言中用于格式化输出的一种格式说明符,主要用于以十六进制形式输出整数。具体说明如下
 const char* KernelSourceCode = KERNEL(
 	__kernel void hellocl(__global uint * buffer)
 {
+
 	size_t gidx = get_global_id(0);
+	printf("gidx =  %x ", gidx);
 	size_t gidy = get_global_id(1);
+	printf("gidy =  %x ", gidy);
 	size_t lidx = get_local_id(0);
-	Buffer[gidx + 4 * gidy] = (1 << gdix) | (0x10 << gidy);
+	buffer[gidx + 4 * gidy] = (1 << gidx) | (0x10 << gidy);
+	printf("value =  %x ", gidx + 4*gidy);
 }
 );
 
@@ -44,7 +48,7 @@ int testOpencl()
 			{
 				break;
 			}
-			delete platforms;
+			//delete platforms;
 		}
 		cl_context_properties cps[3] = {
 			CL_CONTEXT_PLATFORM,
@@ -94,30 +98,25 @@ int testOpencl()
 
 
 		int err;
-		for (cl_int k = 0; k < deviceListSize; k++)
-		{
-			// 8. 获取和打印各个设备的name
-			size_t length = 0;
-			cl_device_id each_device = devices[k];
-			err = clGetDeviceInfo(each_device, CL_DEVICE_NAME, 0, 0, &length);
+		//for (cl_int k = 0; k < deviceListSize; k++)
+		//{
+		//	// 8. 获取和打印各个设备的name
+		//	size_t length = 0;
+		//	cl_device_id each_device = devices[k];
+		//	err = clGetDeviceInfo(each_device, CL_DEVICE_NAME, 0, 0, &length);
 
+		//	char* value = new char[length];
+		//	err = clGetDeviceInfo(each_device, CL_DEVICE_NAME, length, value, 0);
 
-			char* value = new char[length];
-			err = clGetDeviceInfo(each_device, CL_DEVICE_NAME, length, value, 0);
+		//	// 9. 获取和打印各个设备的version
+		//	err = clGetDeviceInfo(each_device, CL_DEVICE_VERSION, 0, 0, &length);
 
+		//	char* version = new char[length];
+		//	err = clGetDeviceInfo(each_device, CL_DEVICE_VERSION, length, version, 0);
 
-
-			// 9. 获取和打印各个设备的version
-			err = clGetDeviceInfo(each_device, CL_DEVICE_VERSION, 0, 0, &length);
-
-
-			char* version = new char[length];
-			err = clGetDeviceInfo(each_device, CL_DEVICE_VERSION, length, version, 0);
-
-
-			delete[] value;
-			delete[] version;
-		}
+		//	delete[] value;
+		//	delete[] version;
+		//}
 
 		if (status != CL_SUCCESS)
 		{
@@ -139,6 +138,24 @@ int testOpencl()
 		status = clBuildProgram(program, 1, devices, NULL, NULL, NULL);
 		if (status != CL_SUCCESS)
 		{
+			// 获取构建日志的长度
+			size_t bufferSize = 0;
+			clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, 0, NULL, &bufferSize);
+
+			// 分配足够的空间来存储日志
+			char * logBuffer = new char[bufferSize];
+			if (!logBuffer) {
+				std::cerr << "Failed to allocate memory for log buffer.\n";
+				return -1;
+			}
+
+			// 获取构建日志
+			clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, bufferSize, logBuffer, NULL);
+
+			// 打印日志
+			std::cout << "--- Build log ---\n" << logBuffer << std::endl;
+
+			delete[] logBuffer;
 			printf("error:Building Program \
 					(clBuildProgram)\n");
 			return EXIT_FAILURE;
@@ -155,6 +172,64 @@ int testOpencl()
 		//创建一个opencl command queue
 		cl_command_queue commandQueue =
 				clCreateCommandQueue(context, devices[0], 0, &status);
+		if (status!= CL_SUCCESS)
+		{
+			printf("error:creating command error \
+					(clCreateCommandQueue)\n");
+			return EXIT_FAILURE;
+		}
+
+		// 创建opencl buffer 对象
+		unsigned int* outbuffer = new unsigned int[4 * 4];
+		memset(outbuffer, 0, 4 * 4 * 4);
+		cl_mem outputBuffer = clCreateBuffer(context, CL_MEM_ALLOC_HOST_PTR, 4 * 4 * 4, NULL, &status);
+		if (status!=CL_SUCCESS)
+		{
+			printf("Error:clCreateBuffer\
+					(outputbuffer)\n");
+			return EXIT_FAILURE;
+		}
+
+		// 为内核程序设置相应的参数
+		status = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void*)&outputBuffer);
+		if (status!= CL_SUCCESS)
+		{
+			printf("Error,Set kernel argument.\
+					(output)");
+			return EXIT_FAILURE;
+		}
+		// 将一个kernel放入command queue
+		size_t globalThreads[] = {4,4};
+		size_t localThreads[] = { 2,2 };
+		status = clEnqueueNDRangeKernel(commandQueue, kernel, 2, NULL, globalThreads, localThreads, 0, NULL, NULL);
+		if (status != CL_SUCCESS)
+		{
+			printf("Error:Enqueueing kernel \n");
+			return EXIT_FAILURE;
+		}
+		status = clFinish(commandQueue);
+		if (status != CL_SUCCESS)
+		{
+			printf("Error:Finish command queue\n");
+			return EXIT_FAILURE;
+		}
+		status = clEnqueueReadBuffer(commandQueue, outputBuffer, CL_TRUE, 0, 4 * 4 * 4,outbuffer,0, NULL, NULL);
+		printf("out:\n");
+		for (size_t i = 0; i < 16; i++)
+		{
+			printf("%x ", outbuffer[i]);
+			if ((i + 1) % 4 == 0)
+				printf("\n");
+
+		}
+		status = clReleaseKernel(kernel);
+		status = clReleaseProgram(program);
+		status = clReleaseContext(context);
+		status = clReleaseMemObject(outputBuffer);
+		status = clReleaseCommandQueue(commandQueue);
+		free(devices);
+		delete outbuffer;
+
 
 	}
 
